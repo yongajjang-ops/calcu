@@ -4,6 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>계산기</title>
+
+    <!-- PWA 설정 -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#667eea">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="계산기">
+
+    <!-- 아이콘 -->
+    <link rel="icon" type="image/svg+xml" href="calculator-icon.svg">
+    <link rel="apple-touch-icon" href="calculator-icon.svg">
     <style>
         * {
             margin: 0;
@@ -38,8 +50,16 @@
             font-size: 2.5rem;
             font-weight: bold;
             min-height: 80px;
-            word-break: break-all;
+            width: 100%;
+            border: none;
             border-bottom: 1px solid #e0e0e0;
+            outline: none;
+            font-family: 'Arial', sans-serif;
+        }
+
+        .display:focus {
+            background: #fff;
+            box-shadow: inset 0 0 5px rgba(102, 126, 234, 0.3);
         }
 
         .history-section {
@@ -116,6 +136,15 @@
             background: #e04545;
         }
 
+        .btn.backspace {
+            background: #ff8a80;
+            color: #fff;
+        }
+
+        .btn.backspace:active {
+            background: #e57373;
+        }
+
         .btn.equals {
             background: #4caf50;
             color: #fff;
@@ -151,7 +180,7 @@
 </head>
 <body>
     <div class="calculator">
-        <div class="display" id="display">0</div>
+        <input type="text" class="display" id="display" value="0" inputmode="none">
 
         <div class="history-section">
             <div class="history-label">계산 내역 (터치하여 수정)</div>
@@ -176,8 +205,11 @@
 
             <button class="btn clear" data-value="C">C</button>
             <button class="btn number" data-value="0">0</button>
-            <button class="btn equals" data-value="=">=</button>
+            <button class="btn backspace" data-value="backspace">&#9003;</button>
             <button class="btn operator" data-value="+">+</button>
+
+            <button class="btn number" data-value=".">.</button>
+            <button class="btn equals" data-value="=" style="grid-column: span 3">=</button>
         </div>
     </div>
 
@@ -188,6 +220,7 @@
                 this.history = [];
                 this.display = document.getElementById('display');
                 this.historyList = document.getElementById('historyList');
+                this.isResultDisplayed = false;  // 결과가 표시된 상태인지
 
                 this.init();
             }
@@ -200,19 +233,38 @@
                     });
                 });
 
-                // 키보드 이벤트
+                // 입력창 직접 수정 이벤트
+                this.display.addEventListener('input', () => {
+                    // 쉼표 제거하고 expression에 저장
+                    this.expression = this.removeCommas(this.display.value);
+                    this.isResultDisplayed = false;
+                });
+
+                // 입력창에서 Enter 키 처리
+                this.display.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        this.calculate();
+                    }
+                });
+
+                // 키보드 이벤트 (입력창 외부)
                 document.addEventListener('keydown', (e) => {
+                    // 입력창에 포커스가 있으면 무시 (직접 입력 허용)
+                    if (document.activeElement === this.display) {
+                        return;
+                    }
+
                     if (e.key >= '0' && e.key <= '9') {
                         this.onButtonClick(e.key);
-                    } else if (['+', '-', '*', '/'].includes(e.key)) {
+                    } else if (['+', '-', '*', '/', '.'].includes(e.key)) {
                         this.onButtonClick(e.key);
                     } else if (e.key === 'Enter' || e.key === '=') {
                         this.onButtonClick('=');
                     } else if (e.key === 'Escape' || e.key === 'c' || e.key === 'C') {
                         this.onButtonClick('C');
                     } else if (e.key === 'Backspace') {
-                        this.expression = this.expression.slice(0, -1);
-                        this.updateDisplay();
+                        this.onButtonClick('backspace');
                     }
                 });
             }
@@ -237,23 +289,129 @@
                 return expr.replace(/,/g, '');
             }
 
+            // 포맷된 문자열에서의 커서 위치를 raw 위치로 변환
+            formattedToRawPosition(formattedStr, formattedPos) {
+                let rawPos = 0;
+                let formattedIndex = 0;
+                while (formattedIndex < formattedPos && formattedIndex < formattedStr.length) {
+                    if (formattedStr[formattedIndex] !== ',') {
+                        rawPos++;
+                    }
+                    formattedIndex++;
+                }
+                return rawPos;
+            }
+
+            // raw 위치를 포맷된 문자열에서의 커서 위치로 변환
+            rawToFormattedPosition(formattedStr, rawPos) {
+                let formattedIndex = 0;
+                let rawIndex = 0;
+                while (rawIndex < rawPos && formattedIndex < formattedStr.length) {
+                    if (formattedStr[formattedIndex] !== ',') {
+                        rawIndex++;
+                    }
+                    formattedIndex++;
+                }
+                return formattedIndex;
+            }
+
             onButtonClick(value) {
                 if (value === 'C') {
                     this.expression = '';
+                    this.isResultDisplayed = false;
                     this.updateDisplay();
+                } else if (value === 'backspace') {
+                    this.isResultDisplayed = false;
+                    this.handleBackspace();
                 } else if (value === '=') {
                     this.calculate();
                 } else {
-                    this.expression += value;
-                    this.updateDisplay();
+                    this.handleInsert(value);
                 }
             }
 
+            handleBackspace() {
+                const currentValue = this.display.value;
+                const cursorPos = this.display.selectionStart;
+
+                // 커서가 맨 앞이면 삭제할 것 없음
+                if (cursorPos === 0) return;
+
+                // 포맷된 위치를 raw 위치로 변환
+                const rawPos = this.formattedToRawPosition(currentValue, cursorPos);
+
+                // raw expression에서 커서 앞의 문자 삭제
+                this.expression = this.expression.slice(0, rawPos - 1) + this.expression.slice(rawPos);
+
+                // 디스플레이 업데이트
+                const newFormatted = this.expression === '' ? '0' : this.formatExpression(this.expression);
+                this.display.value = newFormatted;
+
+                // 새로운 커서 위치 계산 및 설정
+                const newRawPos = rawPos - 1;
+                const newFormattedPos = this.rawToFormattedPosition(newFormatted, newRawPos);
+                this.display.setSelectionRange(newFormattedPos, newFormattedPos);
+                this.display.focus();
+            }
+
+            handleInsert(char) {
+                const isOperator = ['+', '-', '*', '/'].includes(char);
+                const isNumber = /[0-9.]/.test(char);
+
+                // 결과가 표시된 상태에서 입력하는 경우
+                if (this.isResultDisplayed) {
+                    if (isNumber) {
+                        // 숫자 입력 시 결과를 지우고 새로 시작
+                        this.expression = char === '.' ? '0.' : char;
+                        this.isResultDisplayed = false;
+                        this.updateDisplay();
+                        const len = this.display.value.length;
+                        this.display.setSelectionRange(len, len);
+                        this.display.focus();
+                        return;
+                    } else if (isOperator) {
+                        // 연산자 입력 시 결과값에 이어서 계산
+                        this.isResultDisplayed = false;
+                        // 결과값 뒤에 연산자 추가
+                    }
+                }
+
+                const currentValue = this.display.value;
+                const cursorPos = this.display.selectionStart;
+
+                // 현재 값이 '0'이고 숫자를 입력하면 0을 대체
+                if (currentValue === '0' && /[0-9]/.test(char)) {
+                    this.expression = char;
+                    this.updateDisplay();
+                    this.display.setSelectionRange(1, 1);
+                    this.display.focus();
+                    return;
+                }
+
+                // 포맷된 위치를 raw 위치로 변환
+                const rawPos = this.formattedToRawPosition(currentValue, cursorPos);
+
+                // raw expression에서 커서 위치에 문자 삽입
+                this.expression = this.expression.slice(0, rawPos) + char + this.expression.slice(rawPos);
+
+                // 디스플레이 업데이트
+                const newFormatted = this.formatExpression(this.expression);
+                this.display.value = newFormatted;
+
+                // 새로운 커서 위치 계산 및 설정
+                const newRawPos = rawPos + 1;
+                const newFormattedPos = this.rawToFormattedPosition(newFormatted, newRawPos);
+                this.display.setSelectionRange(newFormattedPos, newFormattedPos);
+                this.display.focus();
+            }
+
             calculate() {
-                if (!this.expression) return;
+                // 입력창에서 직접 값을 가져옴 (사용자가 수정했을 수 있음)
+                const currentValue = this.display.value;
+                if (!currentValue || currentValue === '0') return;
 
                 try {
-                    const calcExpr = this.removeCommas(this.expression);
+                    const calcExpr = this.removeCommas(currentValue);
                     const result = eval(calcExpr);
 
                     if (result === Infinity || result === -Infinity) {
@@ -263,13 +421,16 @@
                         return;
                     }
 
-                    const resultStr = String(result);
+                    // 소수점 이하 4자리로 반올림 (정수는 그대로)
+                    const roundedResult = Math.round(result * 10000) / 10000;
+                    const resultStr = String(roundedResult);
                     const formattedExpr = this.formatExpression(calcExpr);
                     const formattedResult = this.formatNumber(resultStr);
                     const historyEntry = `${formattedExpr} = ${formattedResult}`;
 
                     this.addToHistory(historyEntry);
-                    this.expression = '';
+                    this.expression = resultStr;
+                    this.isResultDisplayed = true;
                     this.updateDisplay();
                 } catch {
                     alert('잘못된 수식입니다.');
@@ -280,9 +441,9 @@
 
             updateDisplay() {
                 if (this.expression === '') {
-                    this.display.textContent = '0';
+                    this.display.value = '0';
                 } else {
-                    this.display.textContent = this.formatExpression(this.expression);
+                    this.display.value = this.formatExpression(this.expression);
                 }
             }
 
@@ -309,7 +470,12 @@
                 const entry = this.history[index];
                 const exprPart = entry.split(' = ')[0];
                 this.expression = this.removeCommas(exprPart);
+                this.isResultDisplayed = false;
                 this.updateDisplay();
+                // 입력창에 포커스를 주어 바로 수정 가능하게
+                this.display.focus();
+                // 커서를 끝으로 이동
+                this.display.setSelectionRange(this.display.value.length, this.display.value.length);
             }
         }
 
