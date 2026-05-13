@@ -436,7 +436,7 @@
                 // 키보드 이벤트 (입력창 외부)
                 document.addEventListener('keydown', (e) => {
                     // 입력창에 포커스가 있으면 무시 (직접 입력 허용)
-                    if (document.activeElement === this.display) {
+                    if (document.activeElement.tagName === 'INPUT') {
                         return;
                     }
 
