@@ -199,22 +199,23 @@
         .form-row {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 6px;
         }
 
         .form-row label {
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             color: #666;
-            width: 80px;
+            width: 42px;
             flex-shrink: 0;
         }
 
         .form-row input {
             flex: 1;
-            padding: 10px 12px;
+            min-width: 0;
+            padding: 7px 8px;
             border: 1px solid #ddd;
             border-radius: 8px;
-            font-size: 1rem;
+            font-size: 0.95rem;
             outline: none;
             transition: border-color 0.2s;
         }
@@ -225,9 +226,9 @@
         }
 
         .form-row .unit {
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             color: #888;
-            width: 20px;
+            width: 16px;
             flex-shrink: 0;
         }
 
@@ -338,7 +339,7 @@
         <div class="compound-form">
             <div class="form-row">
                 <label>원금</label>
-                <input type="number" id="cpPrincipal" placeholder="1,000,000" min="0">
+                <input type="text" id="cpPrincipal" placeholder="1,000,000" inputmode="numeric">
                 <span class="unit">원</span>
             </div>
             <div class="form-row">
@@ -370,8 +371,16 @@
     </div>
 
     <script>
+        // 원금 쉼표 포맷
+        const cpPrincipalEl = document.getElementById('cpPrincipal');
+        cpPrincipalEl.addEventListener('input', () => {
+            const raw = cpPrincipalEl.value.replace(/,/g, '').replace(/[^0-9]/g, '');
+            cpPrincipalEl.value = raw === '' ? '' : parseInt(raw).toLocaleString();
+        });
+
         function calcCompound() {
-            const P = parseFloat(document.getElementById('cpPrincipal').value);
+            const rawP = document.getElementById('cpPrincipal').value.replace(/,/g, '');
+            const P = parseFloat(rawP);
             const r = parseFloat(document.getElementById('cpRate').value);
             const n = parseFloat(document.getElementById('cpYears').value);
 
